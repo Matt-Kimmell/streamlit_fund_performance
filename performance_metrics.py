@@ -86,7 +86,7 @@ if uploaded_file:
 
             # Find the closest available date
             closest_date = prices.index[prices.index.get_indexer([target_date], method='nearest')[0]]
-            return prices.index[closest_date]
+            return closest_date
         
         def calculate_metrics(prices, returns, end_date):
             excess_returns = returns - risk_free_rate_daily
