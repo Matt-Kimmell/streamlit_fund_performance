@@ -85,7 +85,7 @@ if uploaded_file:
                 target_date = pd.Timestamp(target_date)
 
             # Find the closest available date
-            closest_date = prices.index.get_loc(target_date, method='nearest')
+            closest_date = prices.index[prices.index.get_indexer([target_date], method='nearest')[0]]
             return prices.index[closest_date]
         
         def calculate_metrics(prices, returns, end_date):
