@@ -79,26 +79,57 @@ if uploaded_file:
             drawdown = cum_returns / cum_returns.cummax() - 1
             return drawdown.min()
 
+        def get_closest_date(prices, target_date):
+            """ Helper function to find the closest available trading date to the target date. """
+            if not isinstance(target_date, pd.Timestamp):
+                target_date = pd.Timestamp(target_date)
 
-        def calculate_metrics(returns):
+            # Find the closest available date
+            closest_date = prices.index.get_loc(target_date, method='nearest')
+            return prices.index[closest_date]
+        
+        def calculate_metrics(prices, returns, end_date):
             excess_returns = returns - risk_free_rate_daily
-            one_month = returns[-21:].sum() if len(returns) >= 21 else np.nan
-            three_month = returns[-63:].sum() if len(returns) >= 63 else np.nan
-            twelve_month = returns[-252:].sum() if len(returns) >= 252 else np.nan
-            ytd = returns[returns.index.year == pd.Timestamp.now().year].sum()
-            max_drawdown = calculate_max_drawdown(cumulative_returns[ticker])
-            annualized_volatility = returns.std() * np.sqrt(252)
+            # Ensure the end_date is within the available data range
+            if end_date not in returns.index:
+                end_date = get_closest_date(returns, end_date)
             
-            # Sharpe Ratio over the full available range
+            # Ensure we have data for at least 12 months
+            one_month_date = pd.Timestamp(end_date - pd.DateOffset(months=1))
+            three_month_date = pd.Timestamp(end_date - pd.DateOffset(months=3))
+            twelve_month_date = pd.Timestamp(end_date - pd.DateOffset(months=12))
+
+            try:
+                # Find closest available dates to the target dates
+                one_month_closest = get_closest_date(prices, one_month_date)
+                three_month_closest = get_closest_date(prices, three_month_date)
+                twelve_month_closest = get_closest_date(prices, twelve_month_date)
+
+                # Calculate returns based on closest dates
+                one_month_return = (prices.loc[end_date] / prices.loc[one_month_closest]) - 1
+                three_month_return = (prices.loc[end_date] / prices.loc[three_month_closest]) - 1
+                twelve_month_return = (prices.loc[end_date] / prices.loc[twelve_month_closest]) - 1
+            except KeyError:
+                # If there is no valid date, return NaN
+                one_month_return, three_month_return, twelve_month_return = np.nan, np.nan, np.nan
+
+            # Calculate YTD return based on the closest date at the start of the year
+            ytd_start_date = pd.Timestamp(f"{end_date.year}-01-01")
+            ytd_start_date = get_closest_date(prices, ytd_start_date)
+            ytd_return = (prices.loc[end_date] / prices.loc[ytd_start_date]) - 1
+
+            last_12m_returns = returns.loc[twelve_month_closest:end_date]
+            
+            # Calculate max drawdown for the full date range up to the end date
+            cumulative_returns = (1 + returns).cumprod()
+            max_drawdown = calculate_max_drawdown(cumulative_returns.loc[:end_date])
             sharpe_ratio = (excess_returns.mean() / excess_returns.std()) * np.sqrt(252) if excess_returns.std() > 0 else np.nan
+            annualized_volatility = last_12m_returns.std() * np.sqrt(252)
             
             # Sharpe Ratio over the last 12 months (last 252 trading days)
-            last_12m_returns = returns[-252:] if len(returns) >= 252 else returns
             last_12m_excess_returns = last_12m_returns - risk_free_rate_daily
             sharpe_ratio_12m = (last_12m_excess_returns.mean() / last_12m_excess_returns.std()) * np.sqrt(252) if last_12m_excess_returns.std() > 0 else np.nan
-            
-            return one_month, three_month, twelve_month, ytd, max_drawdown, annualized_volatility, sharpe_ratio, sharpe_ratio_12m
-
+            return one_month_return, three_month_return, twelve_month_return, ytd_return, max_drawdown, annualized_volatility, sharpe_ratio, sharpe_ratio_12m
 
         metrics = {
             "1M Return": [],
@@ -106,19 +137,19 @@ if uploaded_file:
             "12M Return": [],
             "YTD Return": [],
             "Max Drawdown": [],
-            "Annualized Volatility": [],
+            "12M Annualized Volatility": [],
             "Sharpe Ratio over Range": [],
             "12M Sharpe Ratio": [],  # Add this new metric
         }
 
         for ticker in daily_returns.columns:
-            one_month, three_month, twelve_month, ytd, max_drawdown, annualized_volatility, sharpe_ratio, sharpe_ratio_12m = calculate_metrics(daily_returns[ticker])
+            one_month, three_month, twelve_month, ytd, max_drawdown, annualized_volatility, sharpe_ratio, sharpe_ratio_12m  = calculate_metrics(filtered_df[ticker], daily_returns[ticker],end_date)
             metrics["1M Return"].append(one_month)
             metrics["3M Return"].append(three_month)
             metrics["12M Return"].append(twelve_month)
             metrics["YTD Return"].append(ytd)
             metrics["Max Drawdown"].append(max_drawdown)
-            metrics["Annualized Volatility"].append(annualized_volatility)
+            metrics["12M Annualized Volatility"].append(annualized_volatility)
             metrics["Sharpe Ratio over Range"].append(sharpe_ratio)
             metrics["12M Sharpe Ratio"].append(sharpe_ratio_12m)  # Append the new Sharpe Ratio
 
@@ -133,7 +164,7 @@ if uploaded_file:
             "12M Return": "{:.2%}",
             "YTD Return": "{:.2%}",
             "Max Drawdown": "{:.2%}",
-            "Annualized Volatility": "{:.2%}",
+            "12M Annualized Volatility": "{:.2%}",
             "Sharpe Ratio over Range": "{:.2f}",
             "12M Sharpe Ratio": "{:.2f}"
         }))
