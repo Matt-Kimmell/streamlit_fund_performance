@@ -9,7 +9,7 @@ st.set_page_config(page_title="Fund Performance Analysis", layout="wide")
 # File Upload
 st.title("Fund Performance Analysis")
 uploaded_file = st.file_uploader("Upload an Excel file with ticker data", type=["xlsx"])
-
+st.write(f"Pandas version: {pd.__version__}")
 if uploaded_file:
     # Load data
     df = pd.read_excel(uploaded_file, index_col=0)
