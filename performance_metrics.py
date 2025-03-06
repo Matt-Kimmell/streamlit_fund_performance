@@ -73,7 +73,21 @@ if uploaded_file:
             template="plotly_white"
         )
         st.plotly_chart(fig, use_container_width=True)
-        
+        # Convert cumulative returns dataframe to CSV
+        @st.cache_data
+        def convert_for_download(df):
+            return df.to_csv(index=True).encode("utf-8")
+
+        csv_data = convert_for_download(cumulative_returns)
+
+        st.download_button(
+            label="Download Cumulative Returns Data",
+            data=csv_data,
+            file_name="cumulative_returns.csv",
+            mime="text/csv"
+        )
+
+
         def calculate_max_drawdown(cum_returns):
             """ Calculate max drawdown for a single ticker's cumulative returns. """
             drawdown = cum_returns / cum_returns.cummax() - 1
@@ -229,6 +243,75 @@ if uploaded_file:
         )
 
         st.plotly_chart(fig, use_container_width=True)
+        
+        csv_monthly_returns = convert_for_download(monthly_returns)
+        st.download_button(
+            label="Download Monthly Returns Data",
+            data=csv_monthly_returns,
+            file_name="monthly_returns.csv",
+            mime="text/csv"
+        )
+
 
         st.write("Monthly Performance Details")
         st.dataframe(performance_table.style.applymap(highlight_performance))
+
+
+
+
+        # Compute annual returns only if the selected date range is longer than one year
+        if (end_date - start_date).days > 365:
+            st.subheader("Annual Returns Comparison")
+
+            # Resample daily returns to annual returns
+            annual_returns = daily_returns.resample('Y').apply(lambda x: (1 + x).prod() - 1)
+
+            # Extract benchmark returns for comparison
+            benchmark_annual_returns = annual_returns[benchmark]
+            
+            # Remove the benchmark ticker from the selected tickers list for comparison
+            filtered_tickers = [ticker for ticker in selected_tickers if ticker != benchmark]
+
+            # Plot annual returns comparison
+            fig = go.Figure()
+
+            # Plot benchmark annual returns as bars
+            fig.add_trace(go.Bar(
+                x=annual_returns.index.strftime('%Y'),  # Convert dates to year strings for labels
+                y=benchmark_annual_returns,
+                name=f"{benchmark} (Benchmark)",
+                marker_color='blue'
+            ))
+
+            # Plot annual returns for each selected ticker
+            for ticker in filtered_tickers:
+                fig.add_trace(go.Scatter(
+                    x=annual_returns.index.strftime('%Y'),
+                    y=annual_returns[ticker],
+                    mode='lines+markers',
+                    name=ticker
+                ))
+
+            fig.update_layout(
+                title="Annual Returns Comparison with Benchmark",
+                xaxis_title="Year",
+                yaxis_title="Annual Return",
+                hovermode="x unified",
+                template="plotly_white"
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+            csv_annual_returns = convert_for_download(annual_returns)
+            st.download_button(
+                label="Download Annual Returns Data",
+                data=csv_annual_returns,
+                file_name="annual_returns.csv",
+                mime="text/csv"
+            )
+                    # Calculate outperformance vs. the benchmark
+            relative_annual_performance = annual_returns[filtered_tickers].sub(benchmark_annual_returns, axis=0)
+            relative_annual_performance = relative_annual_performance.applymap(lambda x: "Outperform" if x > 0 else "Underperform")
+            # Display relative performance against benchmark
+            st.write("Annual Performance Relative to Benchmark:")
+            st.dataframe(relative_annual_performance.style.applymap(highlight_performance))
+
